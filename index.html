@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Zamanlar</title>
+
+<style>
+:root{
+ --bg:#f2f2f7;
+ --card:#fff;
+ --text:#111;
+ --border:#ddd;
+ --blue:#0a84ff;
+ --orange:#f59e0b;
+ --red:#ef4444;
+ --green:#22c55e;
+ --info:#8b5cf6;
+ --copy-bg:#111827;
+ --copy-text:#fff;
+ --wa:#22c55e;
+ --danger:#7f1d1d;
+}
+[data-theme="dark"]{
+ --bg:#0b1020;
+ --card:#111827;
+ --text:#e5e7eb;
+ --border:#243043;
+ --copy-bg:#374151;
+ --copy-text:#fff;
+}
+
+body{
+ font-family:-apple-system;
+ background:var(--bg);
+ color:var(--text);
+ padding:16px;
+ margin:0;
+}
+
+/* BANNER */
+.banner{
+ width:100%;
+ margin-bottom:12px;
+}
+.banner img{
+ width:100%;
+ border-radius:18px;
+ display:block;
+}
+
+/* CARD */
+.card{
+ background:var(--card);
+ border-radius:16px;
+ padding:16px;
+ border:1px solid var(--border);
+}
+
+.topbtns{
+ display:flex;
+ gap:10px;
+ flex-wrap:wrap;
+ margin:10px 0;
+}
+
+button{
+ border:0;
+ padding:10px 12px;
+ border-radius:10px;
+ color:white;
+}
+
+.theme{background:#6b7280;}
+.new{background:var(--blue);}
+.save{background:var(--orange);}
+.delete{background:#ef4444;}
+.deleteall{background:var(--danger);}
+
+input,select{
+ width:100%;
+ padding:12px;
+ border-radius:12px;
+ border:1px solid var(--border);
+ margin:10px 0;
+ font-size:16px;
+ background:transparent;
+ color:var(--text);
+}
+
+.row{
+ display:flex;
+ gap:10px;
+ padding:10px;
+ border:1px solid var(--border);
+ border-radius:12px;
+ margin-top:8px;
+}
+
+.left{flex:1;}
+.time{font-size:13px;opacity:.7;}
+.note{font-size:12px;margin-top:4px;opacity:.8}
+
+.check{background:var(--blue);}
+.edit{background:var(--orange);}
+.undo{background:#ef4444;}
+.info{background:var(--info);}
+
+.actions{
+ display:flex;
+ gap:10px;
+ margin-top:14px;
+}
+
+.copy{
+ background:var(--copy-bg);
+ color:var(--copy-text);
+ width:100%;
+ padding:12px;
+ font-weight:600;
+}
+
+.whatsapp{
+ background:var(--wa);
+ width:100%;
+ padding:12px;
+ font-weight:700;
+}
+
+.tick{color:var(--green);font-weight:bold;margin-left:6px;}
+</style>
+</head>
+
+<body>
+
+<!-- BANNER -->
+<div class="banner">
+  <img src="banner.jpg" alt="AJet Banner">
+</div>
+
+<div class="card">
+
+<h2>Zamanlar / Times</h2>
+
+<button class="theme" onclick="toggleTheme()">🌙 Theme</button>
+
+<select id="flightList" onchange="loadFlight()"></select>
+<input id="flightCode" placeholder="Uçuş Kodu"/>
+
+<div class="topbtns">
+  <button class="new" onclick="newFlight()">NEW</button>
+  <button class="save" onclick="saveFlights()">SAVE</button>
+  <button class="delete" onclick="deleteFlight()">DELETE</button>
+  <button class="deleteall" onclick="deleteAll()">DELETE ALL</button>
+</div>
+
+<div id="list"></div>
+
+<div class="actions">
+  <button class="copy" onclick="copyData()">COPY</button>
+  <button class="whatsapp" onclick="sendWhatsApp()">WHATSAPP</button>
+</div>
+
+</div>
+
+<script>
+const EVENTS=[
+"Crew Pickup (Hotel)",
+"Arrived Airport",
+"Leave Fly Wise",
+"Arrived Aircraft",
+"Security Search Complete",
+"Boarding Start",
+"Boarding Done",
+"Door Close",
+"Bridge Off",
+"Pushback Start",
+"Deice Start",
+"Deice Complete"
+];
+
+const THEME_KEY="theme";
+
+let flights = JSON.parse(localStorage.getItem("flights") || "[]");
+let active = 0;
+
+(function initTheme(){
+ const saved = localStorage.getItem(THEME_KEY) || "light";
+ document.documentElement.setAttribute("data-theme", saved);
+})();
+
+function todayStr(){
+ return new Date().toLocaleDateString("tr-TR",{day:"2-digit",month:"2-digit",year:"numeric"});
+}
+
+function now(){
+ return new Date().toLocaleTimeString("tr-TR",{hour:"2-digit",minute:"2-digit"});
+}
+
+function migrateFlights(){
+ flights.forEach(f=>{
+  if(!f.date) f.date=todayStr();
+  if(!f.times) f.times={};
+  if(!f.notes) f.notes={};
+ });
+}
+
+function persist(){
+ migrateFlights();
+ localStorage.setItem("flights",JSON.stringify(flights));
+ renderFlightList();
+}
+
+function saveFlights(){
+ persist();
+ alert("Kaydedildi ✔️");
+}
+
+function newFlight(){
+ flights.unshift({code:"",date:todayStr(),times:{},notes:{}});
+ active=0;
+ persist();
+ render();
+}
+
+function deleteFlight(){
+ if(flights.length<=1){
+  alert("En az 1 kayıt kalmalı.");
+  return;
+ }
+ const f=flights[active];
+ const ok=confirm(`Silmek istediğinize emin misiniz?\n\n${f.code||"Flight"} — ${f.date}`);
+ if(!ok) return;
+
+ flights.splice(active,1);
+ active=0;
+ persist();
+ render();
+}
+
+function deleteAll(){
+ const ok=confirm("TÜM KAYITLAR SİLİNECEK.\n\nEmin misiniz?");
+ if(!ok) return;
+
+ flights=[];
+ flights.push({code:"",date:todayStr(),times:{},notes:{}});
+ active=0;
+
+ persist();
+ render();
+
+ alert("Tüm kayıtlar silindi.");
+}
+
+function flightLabel(f,i){
+ return `${(f.code||"Flight "+(i+1))} — ${f.date||""}`;
+}
+
+function renderFlightList(){
+ const s=document.getElementById("flightList");
+ s.innerHTML="";
+ flights.forEach((f,i)=>{
+  const o=document.createElement("option");
+  o.value=i;
+  o.textContent=flightLabel(f,i);
+  if(i===active)o.selected=true;
+  s.appendChild(o);
+ });
+}
+
+function loadFlight(){
+ active=parseInt(document.getElementById("flightList").value);
+ render();
+}
+
+function render(){
+
+ if(!flights.length)newFlight();
+
+ migrateFlights();
+ const f=flights[active];
+
+ document.getElementById("flightCode").value=f.code||"";
+
+ const list=document.getElementById("list");
+ list.innerHTML="";
+
+ EVENTS.forEach((e,i)=>{
+
+  const row=document.createElement("div");
+  row.className="row";
+
+  const left=document.createElement("div");
+  left.className="left";
+
+  const name=document.createElement("div");
+  name.textContent=e;
+
+  if(f.times[i]){
+   const tick=document.createElement("span");
+   tick.className="tick";
+   tick.textContent=" ✓";
+   name.appendChild(tick);
+  }
+
+  const time=document.createElement("div");
+  time.className="time";
+  time.textContent=f.times[i]||"";
+
+  left.appendChild(name);
+  left.appendChild(time);
+
+  if(f.notes[i]){
+   const note=document.createElement("div");
+   note.className="note";
+   note.textContent="📝 "+f.notes[i];
+   left.appendChild(note);
+  }
+
+  const btns=document.createElement("div");
+
+  const check=document.createElement("button");
+  check.className="check";
+  check.textContent="CHECK";
+  check.onclick=()=>{
+   f.times[i]=now();
+   persist(); render();
+  };
+
+  const edit=document.createElement("button");
+  edit.className="edit";
+  edit.textContent="EDIT";
+  edit.onclick=()=>{
+   const v=prompt("Saat HH:MM",f.times[i]||"");
+   if(v)f.times[i]=v;
+   persist(); render();
+  };
+
+  const undo=document.createElement("button");
+  undo.className="undo";
+  undo.textContent="UNDO";
+  undo.onclick=()=>{
+   delete f.times[i];
+   persist(); render();
+  };
+
+  const info=document.createElement("button");
+  info.className="info";
+  info.textContent="INFO";
+  info.onclick=()=>{
+   const n=prompt("Not ekle",f.notes[i]||"");
+   if(n!==null){
+    if(n.trim())f.notes[i]=n.trim();
+    else delete f.notes[i];
+   }
+   persist(); render();
+  };
+
+  btns.append(check,edit,undo,info);
+  row.append(left,btns);
+  list.appendChild(row);
+ });
+
+ renderFlightList();
+}
+
+document.getElementById("flightCode")
+.addEventListener("input",e=>{
+ flights[active].code=e.target.value;
+ persist();
+});
+
+function buildText(){
+ const f=flights[active];
+ let text=`FLIGHT CODE: ${f.code||"N/A"}\nDATE: ${f.date||"N/A"}\n\n`;
+
+ EVENTS.forEach((e,i)=>{
+  const t=f.times[i]||"N/A";
+  const n=f.notes?.[i]?` (${f.notes[i]})`:"";
+  text+=`${e} — ${t}${n}\n`;
+ });
+
+ return text;
+}
+
+function copyData(){
+ navigator.clipboard.writeText(buildText());
+ alert("Kopyalandı ✔️");
+}
+
+function sendWhatsApp(){
+ window.location.href="https://wa.me/?text="+encodeURIComponent(buildText());
+}
+
+function toggleTheme(){
+ const c=document.documentElement.getAttribute("data-theme")||"light";
+ const n=c==="dark"?"light":"dark";
+ document.documentElement.setAttribute("data-theme",n);
+ localStorage.setItem(THEME_KEY,n);
+}
+
+persist();
+render();
+</script>
+
+</body>
+</html>
